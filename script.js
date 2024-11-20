@@ -13,7 +13,7 @@ const vertexShaderSource = `
     uniform mat4 uProjectionMatrix;
 
     void main(void) {
-    gl_Position = uProjectionMatrix * uModelViewMatrix * aVertexPosition;
+        gl_Position = uProjectionMatrix * uModelViewMatrix * aVertexPosition;
     }
 `;
 
@@ -23,7 +23,7 @@ const fragmentShaderSource = `
     uniform vec4 uColor;
 
     void main(void) {
-    gl_FragColor = uColor;
+        gl_FragColor = uColor;
     }
 `;
 
@@ -33,9 +33,9 @@ function compileShader(source, type) {
     gl.shaderSource(shader, source);
     gl.compileShader(shader);
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    console.error('Error compiling shader:', gl.getShaderInfoLog(shader));
-    gl.deleteShader(shader);
-    return null;
+        console.error('Error compiling shader:', gl.getShaderInfoLog(shader));
+        gl.deleteShader(shader);
+        return null;
     }
     return shader;
 }
@@ -53,71 +53,155 @@ if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
     console.error('Error linking program:', gl.getProgramInfoLog(program));
 }
 
-// Setup buffer data for a simple car (rectangle for now)
+// Create buffers
+// Car vertices
 const carVertices = new Float32Array([
-  // X, Y, Z
-  -0.1, -0.05, 0.0,
-   0.1, -0.05, 0.0,
-   0.1,  0.05, 0.0,
-  -0.1,  0.05, 0.0,
-]);
+    -0.15, -0.05, 0.0, // Bottom left
+     0.15, -0.05, 0.0, // Bottom right
+     0.15,  0.05, 0.0, // Top right
+    -0.15,  0.05, 0.0  // Top left
+  ]);
+  
 
 const carVertexBuffer = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, carVertexBuffer);
 gl.bufferData(gl.ARRAY_BUFFER, carVertices, gl.STATIC_DRAW);
 
-// Setup car indices for drawing (rectangle)
 const carIndices = new Uint16Array([0, 1, 2, 0, 2, 3]);
 const carIndexBuffer = gl.createBuffer();
 gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, carIndexBuffer);
 gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, carIndices, gl.STATIC_DRAW);
 
+// Road vertices
+const roadVertices = new Float32Array([
+  -1.0, -1.0, 0.0, // Bottom left
+   1.0, -1.0, 0.0, // Bottom right
+   1.0,  0.0, 0.0, // Top right
+  -1.0,  0.0, 0.0  // Top left
+]);
+
+const roadVertexBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, roadVertexBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, roadVertices, gl.STATIC_DRAW);
+
+const roadIndices = new Uint16Array([0, 1, 2, 0, 2, 3]);
+const roadIndexBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, roadIndexBuffer);
+gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, roadIndices, gl.STATIC_DRAW);
+
+// Lane markings vertices
+const laneVertices = new Float32Array([
+  -0.05, -0.8, 0.0, // Bottom left
+   0.05, -0.8, 0.0, // Bottom right
+   0.05, -0.7, 0.0, // Top right
+  -0.05, -0.7, 0.0  // Top left
+]);
+
+const laneVertexBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, laneVertexBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, laneVertices, gl.STATIC_DRAW);
+
+const laneIndices = new Uint16Array([0, 1, 2, 0, 2, 3]);
+const laneIndexBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, laneIndexBuffer);
+gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, laneIndices, gl.STATIC_DRAW);
+
 // Initialize matrices
 const projectionMatrix = mat4.create();
-mat4.perspective(projectionMatrix, Math.PI / 4, canvas.width / canvas.height, 0.1, 100.0);
+mat4.perspective(projectionMatrix, Math.PI / 3, canvas.width / canvas.height, 0.1, 10.0);
+
 
 const modelViewMatrix = mat4.create();
-mat4.translate(modelViewMatrix, modelViewMatrix, [0.0, 0.0, -2.0]);
 
 // Controls
-let carX = 0.0;
+let carPosition = { x: 0.0, y: -0.2, z: -1.5 }; // Center horizontally and adjust vertically
 
-function handleKeyDown(event) {
-  if (event.key === 'ArrowLeft') carX -= 0.05; // Move left
-  if (event.key === 'ArrowRight') carX += 0.05; // Move right
-}
+const maxSway = 0.5; // Max left/right sway
+let roadOffset = 0.0; // Simulate road movement
 
-document.addEventListener('keydown', handleKeyDown);
+const keyState = {
+    ArrowLeft: false,
+    ArrowRight: false,
+};
 
-// Render function
+document.addEventListener("keydown", (event) => {
+    if (event.key in keyState) keyState[event.key] = true;
+});
+
+document.addEventListener("keyup", (event) => {
+    if (event.key in keyState) keyState[event.key] = false;
+});
+
+
+
+// Main render loop
 function render() {
     gl.clearColor(0.0, 0.0, 0.0, 1.0); // Black background
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
+  
     gl.useProgram(program);
-
-    const vertexPosition = gl.getAttribLocation(program, 'aVertexPosition');
+  
+    const vertexPosition = gl.getAttribLocation(program, "aVertexPosition");
     gl.enableVertexAttribArray(vertexPosition);
-    gl.bindBuffer(gl.ARRAY_BUFFER, carVertexBuffer);
-    gl.vertexAttribPointer(vertexPosition, 3, gl.FLOAT, false, 0, 0);
+  
+    const uProjectionMatrix = gl.getUniformLocation(program, "uProjectionMatrix");
+    const uModelViewMatrix = gl.getUniformLocation(program, "uModelViewMatrix");
+    const uColor = gl.getUniformLocation(program, "uColor");
+  
+    // Functions to draw objects
+    function drawRoad() {
+      gl.uniform4f(uColor, 0.2, 0.2, 0.2, 1.0); // Gray road color
+      gl.bindBuffer(gl.ARRAY_BUFFER, roadVertexBuffer);
+      gl.vertexAttribPointer(vertexPosition, 3, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, roadIndexBuffer);
+      gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+    }
+  
+    function drawLaneMarkings() {
+      gl.uniform4f(uColor, 1.0, 1.0, 1.0, 1.0); // White lane markings
+      for (let i = -1.0; i <= 1.0; i += 0.2) { // Repeat markings along road
+        // Draw car
+        mat4.identity(modelViewMatrix);
+        mat4.translate(modelViewMatrix, modelViewMatrix, [carPosition.x, carPosition.y, carPosition.z]);
+        gl.uniformMatrix4fv(uModelViewMatrix, false, modelViewMatrix);
+        gl.uniform4f(uColor, 1.0, 0.0, 0.0, 1.0); // Red car color
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, carIndexBuffer);
+        gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
 
-    const uProjectionMatrix = gl.getUniformLocation(program, 'uProjectionMatrix');
-    const uModelViewMatrix = gl.getUniformLocation(program, 'uModelViewMatrix');
-    const uColor = gl.getUniformLocation(program, 'uColor');
-
-    mat4.identity(modelViewMatrix);
-    mat4.translate(modelViewMatrix, modelViewMatrix, [carX, -0.8, -2.0]); // Move car with controls
-
+      }
+    }
+  
     gl.uniformMatrix4fv(uProjectionMatrix, false, projectionMatrix);
+  
+    // Update car position based on controls
+    if (keyState.ArrowLeft) carPosition.x = Math.max(carPosition.x - 0.02, -maxSway);
+    if (keyState.ArrowRight) carPosition.x = Math.min(carPosition.x + 0.02, maxSway);
+  
+    // Update roadOffset and loop it within a range
+    roadOffset -= 0.02; // Move road backward
+    if (roadOffset < -2.0) {
+      roadOffset += 2.0; // Reset offset after one cycle
+    }
+  
+    // Draw road
+    mat4.identity(modelViewMatrix);
+    mat4.translate(modelViewMatrix, modelViewMatrix, [0.0, roadOffset % 2.0, -2.0]);
+    drawRoad();
+  
+    // Draw lane markings
+    drawLaneMarkings();
+  
+    // Draw car
+    mat4.identity(modelViewMatrix);
+    mat4.translate(modelViewMatrix, modelViewMatrix, [carPosition.x, carPosition.y, carPosition.z]);
     gl.uniformMatrix4fv(uModelViewMatrix, false, modelViewMatrix);
-
-    gl.uniform4f(uColor, 1.0, 0.0, 0.0, 1.0); // Red color for the car
-
+    gl.uniform4f(uColor, 1.0, 0.0, 0.0, 1.0); // Red car color
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, carIndexBuffer);
     gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
-
+  
     requestAnimationFrame(render);
-}
+  }
+  
 
 // Start rendering
 render();
