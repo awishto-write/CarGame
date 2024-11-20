@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Car on Night Street</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <canvas id="glCanvas"></canvas>
+    
+    <div id="info">
+        <h3>Car on Night Street</h3>
+        <p>Use the <strong>Arrow Keys</strong> to control the car:</p>
+        <ul>
+          <li><strong>Left Arrow:</strong> Move the car left</li>
+          <li><strong>Right Arrow:</strong> Move the car right</li>
+        </ul>
+        <p>The car will move forward automatically. It cannot move backward.</p>
+        <p>Check out the mini-map below to track your progress on the road!</p>
+    </div>
+
+    <div class="mini-map"></div> <!-- mini map place holder -->
+
+    <script src="https://cdn.jsdelivr.net/npm/gl-matrix@2.8.1/dist/gl-matrix-min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
